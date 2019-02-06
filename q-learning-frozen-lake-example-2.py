@@ -31,8 +31,6 @@ def action_to_state(current_state, action):
     """
     Get the expected state from the current state given an action
     """
-    wrap = False
-
     action_size = 4
     state_size = 16
 
@@ -42,37 +40,22 @@ def action_to_state(current_state, action):
     lower_rbound = current_row * action_size
     upper_rbound = lower_rbound + action_size - 1
 
-    if wrap:
-
-        if action == 0:     # left
-            new_state = (current_state - 1) % action_size
-        elif action == 1:   # down
-            new_row = (current_row + 1) % state_size
-            new_state = (new_row * action_size) + current_column
-        elif action == 2:   # right
-            new_state = (current_state + 1) % action_size
-        elif action == 3:   # up
-            new_row = current_row - 1
-            new_state = (new_row * action_size) + current_column
-        else:
-            runtimeException("Invalid action: {}".format(action))
+    if action == 0:     # left
+        new_state = current_state - 1
+        if new_state < lower_rbound or new_state > upper_rbound:
+            new_state = current_state
+    elif action == 1:   # down
+        new_row = (current_row + 1) % state_size
+        new_state = (new_row * action_size) + current_column if new_row < state_size else current_state
+    elif action == 2:   # right
+        new_state = current_state + 1
+        if new_state < lower_rbound or new_state > upper_rbound:
+            new_state = current_state
+    elif action == 3:   # up
+        new_row = current_row - 1
+        new_state = (new_row * action_size) + current_column if new_row >= 0 else current_state
     else:
-        if action == 0:     # left
-            new_state = current_state - 1
-            if new_state < lower_rbound or new_state > upper_rbound:
-                new_state = current_state
-        elif action == 1:   # down
-            new_row = (current_row + 1) % state_size
-            new_state = (new_row * action_size) + current_column if new_row < state_size else current_state
-        elif action == 2:   # right
-            new_state = current_state + 1
-            if new_state < lower_rbound or new_state > upper_rbound:
-                new_state = current_state
-        elif action == 3:   # up
-            new_row = current_row - 1
-            new_state = (new_row * action_size) + current_column if new_row >= 0 else current_state
-        else:
-            runtimeException("Invalid action: {}".format(action))
+        runtimeException("Invalid action: {}".format(action))
 
     return new_state
 
@@ -231,7 +214,8 @@ with tf.Session() as sess:
             print(q)
 
     midpoint = round(len(rewardList)/2)
-    print("Percent of succesful episodes (2nd half of training): {:4f}%".format(sum(rewardList[midpoint:])/midpoint))
+    success_count = sum(rewardList[midpoint:])/midpoint if midpoint else 0
+    print("Percent of succesful episodes (2nd half of training): {:4f}%".format(success_count))
 
     # rewardList is a list of success/failure. 1's represent success, 1's become more
     # frequent over time.
