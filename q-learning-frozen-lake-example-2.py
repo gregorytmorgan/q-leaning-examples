@@ -18,7 +18,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 # 1 = dump each episode, 2 dump each step, 4: break at first success, 8: plotm 16: play game . e.g. DEBUG = 7, dump all steps,episodes,break on success
-DEBUG = 1
+DEBUG = 25
 
 games_to_play = 3
 report_increment = 100
@@ -113,7 +113,7 @@ decay_rate = 0.005          # Exponential decay rate for exploration prob
 y = .98
 
 #num_episodes = 2000 original value
-num_episodes = 1
+num_episodes = 1000
 
 #create lists to contain total rewards and steps per episode
 stepList = []
