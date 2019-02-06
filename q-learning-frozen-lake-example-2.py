@@ -17,7 +17,7 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-# 1 = dump each episode, 2 dump each step, 4: break at first success. e.g. DEBUG = 7, dump all steps,episodes,break on success
+# 1 = dump each episode, 2 dump each step, 4: break at first success, 8: plotm 16: play game . e.g. DEBUG = 7, dump all steps,episodes,break on success
 DEBUG = 1
 
 games_to_play = 3
@@ -77,6 +77,7 @@ env = gym.make('FrozenLake-v0')
 #)
 #env = gym.make('FrozenLakeNotSlippery-v0')
 
+print("Map:")
 env.render()
 
 tf.reset_default_graph()
@@ -217,58 +218,61 @@ with tf.Session() as sess:
     success_count = sum(rewardList[midpoint:])/midpoint if midpoint else 0
     print("Percent of succesful episodes (2nd half of training): {:4f}%".format(success_count))
 
-    # rewardList is a list of success/failure. 1's represent success, 1's become more
-    # frequent over time.
-    plt.gca().set_title("Reward/Episode".format())
-    plt.plot(rewardList)
-    plt.show()
+    if DEBUG & 8:
+        # rewardList is a list of success/failure. 1's represent success, 1's become more
+        # frequent over time.
+        plt.gca().set_title("Reward/Episode".format())
+        plt.plot(rewardList)
+        plt.show()
 
-    # stepList is a list of episode durations. Episode length greather than chance
-    # repreent 'knowledge'
-    plt.gca().set_title("Steps/Episode".format())
-    plt.plot(stepList)
-    plt.show()
+        # stepList is a list of episode durations. Episode length greather than chance
+        # repreent 'knowledge'
+        plt.gca().set_title("Steps/Episode".format())
+        plt.plot(stepList)
+        plt.show()
 
     #
     # play the game
     #
-    env.reset()
+    if DEBUG & 16:
 
-    for episode in range(games_to_play):
-        state = env.reset()
-        step = 0
-        done = False
-        print("\nPlay ****************************************************")
-        print("EPISODE ", episode)
+        env.reset()
 
-        for step in range(max_steps):
-            print("\nStep {}".format(step))
+        for episode in range(games_to_play):
+            state = env.reset()
+            step = 0
+            done = False
+            print("\nPlay ****************************************************")
+            print("EPISODE ", episode)
 
-            #Obtain the Q' values by feeding the new state through our network
-            action, allQ = sess.run([predict, Qout], feed_dict={inputs1:np.identity(16)[state:state + 1]})
+            for step in range(max_steps):
+                print("\nStep {}".format(step))
 
-            print("Requesting action: {}({})".format(Directions[action[0]], action[0]))
+                #Obtain the Q' values by feeding the new state through our network
+                action, allQ = sess.run([predict, Qout], feed_dict={inputs1:np.identity(16)[state:state + 1]})
 
-            new_state, reward, done, info = env.step(action[0])
+                print("Requesting action: {}({})".format(Directions[action[0]], action[0]))
 
-            env.render()
+                new_state, reward, done, info = env.step(action[0])
 
-            if new_state != action_to_state(state, action[0]):
-                print("Requested state: {}, slipped to {}".format(action_to_state(state, action[0]), new_state))
+                env.render()
 
-            if done:
-              if reward:
-                print("Success")
-              else:
-                print("Fail")
-              break
+                if new_state != action_to_state(state, action[0]):
+                    print("Requested state: {}, slipped to {}".format(action_to_state(state, action[0]), new_state))
 
-            if done:
-              # We print the number of step it took.
-              print("Number of steps", step)
-              break
+                if done:
+                  if reward:
+                    print("Success")
+                  else:
+                    print("Fail")
+                  break
 
-            state = new_state
+                if done:
+                  # We print the number of step it took.
+                  print("Number of steps", step)
+                  break
+
+                state = new_state
 
 env.close()
 
