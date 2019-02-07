@@ -142,7 +142,7 @@ with tf.Session() as sess:
             #Choose an action by greedily (with epsilon chance of random action) from the Q-network
             a, allQ = sess.run([predict, Qout], feed_dict={inputs1:np.identity(16)[s:s+1]})
 
-            if DEBUG & 2: print("a:{}, allQ:{}".format(a, allQ))
+            if DEBUG & 2: print("a:{}, allQ:{}, Qout:{}".format(a, allQ, Qout))
 
             if np.random.rand(1) < epsilon:
                 random_action_count += 1
@@ -158,7 +158,7 @@ with tf.Session() as sess:
 #                print(path)
 #                solved = True
 
-            if DEBUG & 2: print("step result:{} --> s1:{}, r:{}, d:{}".format(Directions[a[0]], s1,r, d))
+            if DEBUG & 2: print("step result:{} --> s1:{}, r:{}, d:{}".format(Directions[a[0]], s1, r, d))
 
             #Obtain the Q' values by feeding the new state through our network
             Q1 = sess.run(Qout, feed_dict={inputs1:np.identity(16)[s1:s1 + 1]})
@@ -251,7 +251,7 @@ with tf.Session() as sess:
                 #Obtain the Q' values by feeding the new state through our network
                 action, allQ = sess.run([predict, Qout], feed_dict={inputs1:np.identity(16)[state:state + 1]})
 
-                print("Requesting action: {}({})".format(Directions[action[0]], action[0]))
+                print("Current state {}, requesting action: {}({})".format(state, Directions[action[0]], action[0]))
 
                 new_state, reward, done, info = env.step(action[0])
 
