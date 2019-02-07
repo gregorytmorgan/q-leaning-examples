@@ -21,6 +21,7 @@ from keras.models import Sequential
 from keras.layers import Dense # , Activation
 #from keras.backend import clear_session
 from keras.models import load_model
+from keras import optimizers
 
 #%matplotlib inline
 
@@ -42,6 +43,8 @@ DEBUG = DEBUG_EPISODE_SUMMARY | DEBUG_DUMP_TABLE | DEBUG_PLAY_GAME | DEBUG_TRAIN
 game_to_play = 3
 model_filename = "frozen-lake-model.h5"
 report_increment = 100
+
+mean_trailing_reward = False
 
 #
 # init the OpenAI environment
@@ -98,6 +101,10 @@ MAPS = {
 }
 """
 
+def dump_table(model, state_size):
+    for s in range(state_size):
+      print("{:<2d}: {}".format(s, model.predict(np.identity(state_size)[s:s + 1])))
+
 def action_to_state(current_state, action):
     """
     Get the expected state from the current state given an action
@@ -137,6 +144,23 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
     #model_file = Path(model_filename)
     model_file = False
 
+
+    #
+    # hyper params
+    #
+    num_episodes = 2000         # Total episodes
+    learning_rate = 0.001       # Learning rate
+    max_steps = 99              # Max steps per episode
+    gamma = 0.98                # Discounting rate
+
+    # Exploration parameters
+    max_epsilon = 1            # Exploration probability at start
+    min_epsilon = 0.01          # Minimum exploration probability
+    epsilon = max_epsilon       # Exploration rate
+    #decay_rate = 0.005         # Exponential decay rate for exploration prob
+    decay_rate = 0.005
+
+
 #    model = Sequential()
 #    model.add(Embedding(16, 4, input_length=1))
 #    model.add(Reshape((4,)))
@@ -155,29 +179,26 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
         # activation='linear'
         # activation='sigmoid'
         model = Sequential([
-            Dense(16, input_shape=(16,), use_bias=False, kernel_initializer='RandomUniform', activation='sigmoid'),
-            Dense(4, activation='linear', use_bias=False, kernel_initializer='RandomUniform')
+            Dense(16, activation='relu', kernel_initializer='RandomUniform', use_bias=True, input_shape=(16,)),
+            Dense(24, activation='relu', kernel_initializer='RandomUniform', use_bias=True),
+ #           Dense(16, activation='relu', kernel_initializer='RandomUniform', use_bias=True),
+            Dense(4, activation='linear',  kernel_initializer='RandomUniform', use_bias=True)
         ])
+
+
+        # https://stackoverflow.com/questions/45869939/something-wrong-with-keras-code-q-learning-openai-gym-frozenlake
+        #def custom_loss(yTrue, yPred):
+        #    return K.sum(K.square(yTrue - yPred))
+        #model.compile(loss=custom_loss, optimizer='sgd')
 
         # loss='mean_squared_error' or 'mse'
         # optimizer='adam', 'sgd'
-        model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
+        # optimizers.SGD(lr=0.01, clipvalue=0.5)
+        # optimizers.RMSprop(lr=0.001, rho=0.9, epsilon=None, decay=0.0)
+        # optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        model.compile(loss='mean_squared_error', optimizer = optimizers.Adam(lr=learning_rate), metrics=['accuracy'])
 
     #
-    # hyper params
-    #
-    num_episodes = 2000       # Total episodes
-    #learning_rate = 0.8           # Learning rate
-    max_steps = 99                # Max steps per episode
-    gamma = 0.98                  # Discounting rate
-
-    # Exploration parameters
-    epsilon = 1                # Exploration rate
-    max_epsilon = 1.0           # Exploration probability at start
-    min_epsilon = 0.01          # Minimum exploration probability
-    #decay_rate = 0.005          # Exponential decay rate for exploration prob
-    decay_rate = 0.001
-
     steps = []
     rewards = []
 
@@ -206,9 +227,8 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
 
             new_state, reward, done, _ = env.step(action)
 
-
-            if reward:
-                print("success {} {}".format(reward, done))
+            #if done and reward == 0:
+            #    reward = -.01
 
             #if new_statetate != action_to_state(state, action):
             #    print("Requested state {}, slipped to ()".format(action_to_state(state, action), new_state))
@@ -216,45 +236,61 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
             #print("state:{}, r:{}, done:{}".format(new_state, r, done))
 
             # get loss
-            current_value = np.max(model.predict(np.identity(16)[state:state + 1]))
-            target_value = reward + gamma * current_value
-
-            #print("target:{}".format(target))
-
             target_vec = model.predict(np.identity(16)[state:state + 1])[0]
+
+            if reward == 1:
+                print("success")
+                #print("original vector: {}".format(target_vec))
+
+            current_value = np.max(target_vec)
+            target_value = reward + gamma * current_value
             target_vec[action] = target_value
 
-            #print("update model {}/{} (state/action), {} -> {}".format(state, action, current_value, target_value))
+            if reward == 1:
+                pass
+                #print("reward: {}, gamma: {}".format(reward, gamma))
+                #print("update model {}/{} (state/action), {:.4f} -> {:.4f}".format(state, action, current_value, target_value))
+                #print("target_vec:{}".format(target_vec))
+                #print("np.identity(16)[state:state + 1]:{}".format(np.identity(16)[state:state + 1]))
+                #print("target_vec.reshape(-1, 4):{}".format(target_vec.reshape(-1, 4)))
+                #dump_table(model, state_size)
 
-            #print("target_vec:{}".format(target_vec))
-            #print("np.identity(16)[state:state + 1]:{}".format(np.identity(16)[state:state + 1]))
-            #print("target_vec.reshape(-1, 4):{}".format(target_vec.reshape(-1, 4)))
 
             # update model
-            model.fit(np.identity(16)[state:state + 1], target_vec.reshape(-1, 4), epochs=1, verbose=0)
+            model.fit(np.identity(16)[state:state + 1], target_vec.reshape(-1, 4), epochs=1, verbose=0, batch_size=1) # batch_size=None
 
             state = new_state
 
             step += 1
 
+            #if step == max_steps:
+            #    print("max steps")
+
             # Reduce epsilon (because we need less and less exploration)
-            if reward:
-                epsilon = min_epsilon + (max_epsilon - min_epsilon) * np.exp(-decay_rate * episode)
+            #if reward = 1:
+            epsilon = min_epsilon + (max_epsilon - min_epsilon) * np.exp(-decay_rate * episode)
 
         steps.append(step)
         rewards.append(reward)
 
+        reward_trail_start = 0 if len(rewards) < report_increment else round(len(rewards) * .8)
+
+        mean_trailing_reward = round(np.mean(rewards[reward_trail_start:]), 4) if rewards else 0
+
         if DEBUG and (DEBUG & DEBUG_EPISODE_SUMMARY):
-            if episode % report_increment == 0:
-                print("Episode {:>3d} of {:>4d} epsilon/mean_steps/rewards: {:6.4f} / {:4.1f} / {}".format(episode, num_episodes, epsilon, np.mean(steps), np.sum(rewards))) # np.mean(steps), np.mean(rewards)
+            if (episode % report_increment == 0 or episode == num_episodes - 1) and episode != 0:
+                #print("Episode {:>3d} of {:>4d} epsilon/mean_steps/mean_rewards(trailing {}): {:6.4f} / {:4.1f} / {}".format(episode, num_episodes, len(rewards) - reward_trail_start, epsilon, round(np.mean(steps), 4), mean_trailing_reward)) # np.mean(steps), np.mean(rewards)
+                print("Episode {:>3d} of {:>4d} epsilon/mean_steps/rewards: {:6.4f} / {:4.1f} / {}".format(episode, num_episodes, epsilon, round(np.mean(steps), 4), round(np.mean(rewards), 4)))
 
     #
     # dump the table/values
     #
     if DEBUG and (DEBUG & DEBUG_DUMP_TABLE):
-        for s in range(state_size):
-          print("{:<2d}: {}".format(s, model.predict(np.identity(16)[s:s + 1])))
+        dump_table(model, state_size)
 
+    #
+    # save the model
+    #
     if model_file and model_file:
         model.save(model_filename)
         del model
@@ -262,53 +298,60 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
 #
 # play the game
 #
-if DEBUG and (DEBUG & DEBUG_PLAY_GAME) and np.mean(rewards) >= .5:
+if DEBUG and (DEBUG & DEBUG_PLAY_GAME):
 
-    if model_file and model_file.is_file():
-        model = load_model(model_filename)
+    rewards_game_threshold = .5
+
+    # mean_trailing_reward will be False if we didn't train
+    if mean_trailing_reward is False or mean_trailing_reward >= rewards_game_threshold:
+
+        if model_file and model_file.is_file():
+            model = load_model(model_filename)
+        else:
+            runtimeException("No model")
+
+        env.reset()
+
+        for episode in range(game_to_play):
+            state = env.reset()
+            step = 0
+            done = False
+            print("\nPlay ****************************************************")
+            print("EPISODE ", episode)
+
+            for step in range(max_steps):
+                print("\nStep {}".format(step))
+
+                states = model.predict(np.identity(16)[state:state + 1])[0]
+
+                action = np.argmax(states)
+
+                print("Requesting action:{}({})".format(Directions[action], action))
+
+                new_state, reward, done, info = env.step(action)
+
+                if new_state != action_to_state(state, action):
+                    print("Requested state {}, slipped to ()".format(action_to_state(state, action), new_state))
+
+                if done:
+                    if reward:
+                      print("Success")
+                    else:
+                      print("Fail")
+                    break
+
+                #print("state:{}, r:{}, done:{}, info".format(new_state, reward, done, info))
+
+                env.render()
+
+                if done:
+                  # We print the number of step it took.
+                  print("Number of steps", step)
+                  break
+
+                state = new_state
     else:
-        runtimeException("No model")
-
-    env.reset()
-
-    for episode in range(game_to_play):
-        state = env.reset()
-        step = 0
-        done = False
-        print("\nPlay ****************************************************")
-        print("EPISODE ", episode)
-
-        for step in range(max_steps):
-            print("\nStep {}".format(step))
-
-            states = model.predict(np.identity(16)[state:state + 1])[0]
-
-            action = np.argmax(states)
-
-            print("Requesting action:{}({})".format(Directions[action], action))
-
-            new_state, reward, done, info = env.step(action)
-
-            if new_state != action_to_state(state, action):
-                print("Requested state {}, slipped to ()".format(action_to_state(state, action), new_state))
-
-            if done:
-                if reward:
-                  print("Success")
-                else:
-                  print("Fail")
-                break
-
-            #print("state:{}, r:{}, done:{}, info".format(new_state, reward, done, info))
-
-            env.render()
-
-            if done:
-              # We print the number of step it took.
-              print("Number of steps", step)
-              break
-
-            state = new_state
+        print("Aborted game, trailing {} rewards is {}. Threshold is {}".format(reward_trail_start, mean_trailing_reward, rewards_game_threshold))
 
 env.close()
 
