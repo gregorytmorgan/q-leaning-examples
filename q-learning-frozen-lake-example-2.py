@@ -27,13 +27,41 @@ np.set_printoptions(precision=4, linewidth=280, suppress=True, threshold=64)
 
 Directions = ['Left', 'Down', 'Right', 'Up']
 
+#
+# init the OpenAI environment
+#
+
+env = gym.make('FrozenLake-v0')
+
+#from gym.envs.registration import register
+#register(
+#    id='FrozenLakeNotSlippery-v0',
+#    entry_point='gym.envs.toy_text:FrozenLakeEnv',
+#    kwargs={'map_name' : '4x4', 'is_slippery': False},
+#    max_episode_steps=100,
+#    reward_threshold=0.8196, # optimum = .8196, changing this seems have no influence
+#)
+#env = gym.make('FrozenLakeNotSlippery-v0')
+
+print("Map:")
+env.render()
+
+action_size = env.action_space.n
+state_size = env.observation_space.n
+
+
+def dump_table(Qout, state_size):
+    """
+    Dump the virtual q-table
+    """
+    for s in range(state_size - 1):
+        q = sess.run(Qout, feed_dict={inputs1:np.identity(state_size)[s:s+1]})
+        print(q)
+
 def action_to_state(current_state, action):
     """
     Get the expected state from the current state given an action
     """
-    action_size = 4
-    state_size = 16
-
     current_row = current_state % 4
     current_column = current_state % action_size
 
@@ -59,26 +87,27 @@ def action_to_state(current_state, action):
 
     return new_state
 
-#%matplotlib inline
 
 #
-# init the OpenAI environment
+# hyper params
 #
 
-env = gym.make('FrozenLake-v0')
+# Exploration parameters
+min_epsilon = 0.01          # Minimum exploration probability
+max_epsilon = 1.0           # Exploration probability at start
+epsilon = max_epsilon       # Exploration rate
+#decay_rate = 0.005         # Exponential decay rate for exploration prob
+decay_rate = 0.005          # Exponential decay rate for exploration prob
 
-#from gym.envs.registration import register
-#register(
-#    id='FrozenLakeNotSlippery-v0',
-#    entry_point='gym.envs.toy_text:FrozenLakeEnv',
-#    kwargs={'map_name' : '4x4', 'is_slippery': False},
-#    max_episode_steps=100,
-#    reward_threshold=0.8196, # optimum = .8196, changing this seems have no influence
-#)
-#env = gym.make('FrozenLakeNotSlippery-v0')
+# learning params
+y = .98
 
-print("Map:")
-env.render()
+#num_episodes = 2000 original value
+num_episodes = 1000
+
+#
+# build the model
+#
 
 tf.reset_default_graph()
 
@@ -97,30 +126,15 @@ updateModel = trainer.minimize(loss)
 #init = tf.initialize_all_variables()
 init = tf.global_variables_initializer()
 
-#
-# Hyper params
-#
-
-# Exploration parameters
-min_epsilon = 0.01          # Minimum exploration probability
-max_epsilon = 1.0           # Exploration probability at start
-epsilon = .2      # Exploration rate
-#decay_rate = 0.005          # Exponential decay rate for exploration prob
-decay_rate = 0.005          # Exponential decay rate for exploration prob
-#decay_rate = epsilon/1000   # Exponential decay rate for exploration prob
-
-# learning params
-y = .98
-
-#num_episodes = 2000 original value
-num_episodes = 1000
-
 #create lists to contain total rewards and steps per episode
 stepList = []
 rewardList = []
 
 with tf.Session() as sess:
     sess.run(init)
+
+    dump_table(Qout, state_size)
+
     for episode in range(num_episodes):
         if DEBUG & 1:
             if episode % report_increment == 0:
@@ -210,9 +224,7 @@ with tf.Session() as sess:
 
     # dump the table
     if (episode == num_episodes - 1) or (DEBUG & 4):
-        for s in range(15):
-            q = sess.run(Qout, feed_dict={inputs1:np.identity(16)[s:s+1]})
-            print(q)
+        dump_table(Qout, state_size)
 
     midpoint = round(len(rewardList)/2)
     success_count = sum(rewardList[midpoint:])/midpoint if midpoint else 0
