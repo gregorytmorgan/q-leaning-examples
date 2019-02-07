@@ -22,8 +22,7 @@ from keras.layers import Dense # , Activation
 #from keras.backend import clear_session
 from keras.models import load_model
 from keras import optimizers
-
-#%matplotlib inline
+from keras import backend as K
 
 np.set_printoptions(precision=4, linewidth=280, suppress=True, threshold=64)
 
@@ -50,16 +49,20 @@ mean_trailing_reward = False
 # init the OpenAI environment
 #
 
+env = gym.make("FrozenLake-v0")
+
 #from gym.envs.registration import register
 #register(
 #    id='FrozenLakeNotSlippery-v0',
 #    entry_point='gym.envs.toy_text:FrozenLakeEnv',
-#    kwargs={'map_name' : '8x8', 'is_slippery': False},
+#    kwargs={'map_name' : '4x4', 'is_slippery': False},
 #    max_episode_steps=100,
 #    reward_threshold=0.8196, # optimum = .8196, changing this seems have no influence
 #)
+#env = gym.make("FrozenLakeNotSlippery-v0")
 
-env = gym.make("FrozenLake-v0")
+print("Map:")
+env.render()
 
 #
 # helper constants/functions
@@ -67,18 +70,8 @@ env = gym.make("FrozenLake-v0")
 
 action_size = env.action_space.n
 state_size = env.observation_space.n
-qtable = np.zeros((state_size, action_size))
-qtable.shape # (16, 4)
 
-env.render()
-
-# ['W', 'S', 'E', 'N']
-Directions = [
-    'Left',
-    'Down',
-    'Right',
-    'Up'
-]
+Directions = ['Left', 'Down', 'Right', 'Up']
 
 """
 MAPS = {
@@ -148,25 +141,22 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
     #
     # hyper params
     #
-    num_episodes = 2000         # Total episodes
-    learning_rate = 0.001       # Learning rate
+    num_episodes = 1000         # Total episodes
     max_steps = 99              # Max steps per episode
+
+    # learning params
     gamma = 0.98                # Discounting rate
+    learning_rate = 0.1         # Learning rate
 
     # Exploration parameters
-    max_epsilon = 1            # Exploration probability at start
+    max_epsilon = .1            # Exploration probability at start
     min_epsilon = 0.01          # Minimum exploration probability
     epsilon = max_epsilon       # Exploration rate
     #decay_rate = 0.005         # Exponential decay rate for exploration prob
     decay_rate = 0.005
 
-
-#    model = Sequential()
-#    model.add(Embedding(16, 4, input_length=1))
-#    model.add(Reshape((4,)))
-
     #
-    # init the model
+    # build the model
     #
     if model_file and model_file.is_file():
         model = load_model(model_filename)
@@ -179,24 +169,28 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
         # activation='linear'
         # activation='sigmoid'
         model = Sequential([
-            Dense(16, activation='relu', kernel_initializer='RandomUniform', use_bias=True, input_shape=(16,)),
-            Dense(24, activation='relu', kernel_initializer='RandomUniform', use_bias=True),
- #           Dense(16, activation='relu', kernel_initializer='RandomUniform', use_bias=True),
-            Dense(4, activation='linear',  kernel_initializer='RandomUniform', use_bias=True)
+            Dense(16, activation='sigmoid', kernel_initializer='RandomUniform', use_bias=False, input_shape=(16,)),
+ #           Dense(24, activation='relu', kernel_initializer='RandomUniform', use_bias=False),
+ #           Dense(16, activation='relu', kernel_initializer='RandomUniform', use_bias=False),
+            Dense(4, activation='linear',  kernel_initializer='RandomUniform', use_bias=False)
         ])
 
-
-        # https://stackoverflow.com/questions/45869939/something-wrong-with-keras-code-q-learning-openai-gym-frozenlake
-        #def custom_loss(yTrue, yPred):
-        #    return K.sum(K.square(yTrue - yPred))
-        #model.compile(loss=custom_loss, optimizer='sgd')
+        # stackoverflow.com/questions/45869939/something-wrong-with-keras-code-q-learning-openai-gym-frozenlake
+        def sum_of_sqares(yTrue, yPred):
+            return K.sum(K.square(yTrue - yPred))
 
         # loss='mean_squared_error' or 'mse'
+        # loiss=
         # optimizer='adam', 'sgd'
         # optimizers.SGD(lr=0.01, clipvalue=0.5)
         # optimizers.RMSprop(lr=0.001, rho=0.9, epsilon=None, decay=0.0)
         # optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
-        model.compile(loss='mean_squared_error', optimizer = optimizers.Adam(lr=learning_rate), metrics=['accuracy'])
+
+        model.compile(loss=sum_of_sqares, optimizer = optimizers.SGD(lr=learning_rate), metrics=['accuracy'])
+
+        #print(model.summary())
+
+        dump_table(model, state_size)
 
     #
     steps = []
@@ -227,8 +221,8 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
 
             new_state, reward, done, _ = env.step(action)
 
-            #if done and reward == 0:
-            #    reward = -.01
+            #if done and reward == 0 and episode < 500:
+            #    reward = -.001
 
             #if new_statetate != action_to_state(state, action):
             #    print("Requested state {}, slipped to ()".format(action_to_state(state, action), new_state))
@@ -280,13 +274,17 @@ if DEBUG and (DEBUG & DEBUG_TRAIN):
         if DEBUG and (DEBUG & DEBUG_EPISODE_SUMMARY):
             if (episode % report_increment == 0 or episode == num_episodes - 1) and episode != 0:
                 #print("Episode {:>3d} of {:>4d} epsilon/mean_steps/mean_rewards(trailing {}): {:6.4f} / {:4.1f} / {}".format(episode, num_episodes, len(rewards) - reward_trail_start, epsilon, round(np.mean(steps), 4), mean_trailing_reward)) # np.mean(steps), np.mean(rewards)
-                print("Episode {:>3d} of {:>4d} epsilon/mean_steps/rewards: {:6.4f} / {:4.1f} / {}".format(episode, num_episodes, epsilon, round(np.mean(steps), 4), round(np.mean(rewards), 4)))
+                print("Episode {:>3d} of {:>4d} e/s/r: {:.4f} / {:4.1f} / {}".format(episode, num_episodes, epsilon, round(np.mean(steps), 4), round(np.mean(rewards), 4)))
 
     #
     # dump the table/values
     #
     if DEBUG and (DEBUG & DEBUG_DUMP_TABLE):
         dump_table(model, state_size)
+
+    midpoint = round(len(rewards)/2)
+    success_count = sum(rewards[midpoint:])/midpoint if midpoint else 0
+    print("Percent of succesful episodes (2nd half of training): {:4f}%".format(success_count))
 
     #
     # save the model

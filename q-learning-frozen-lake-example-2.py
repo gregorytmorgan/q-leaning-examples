@@ -25,8 +25,6 @@ report_increment = 100
 
 np.set_printoptions(precision=4, linewidth=280, suppress=True, threshold=64)
 
-Directions = ['Left', 'Down', 'Right', 'Up']
-
 #
 # init the OpenAI environment
 #
@@ -46,9 +44,35 @@ env = gym.make('FrozenLake-v0')
 print("Map:")
 env.render()
 
+#
+# helper constants/functions
+#
+
 action_size = env.action_space.n
 state_size = env.observation_space.n
 
+Directions = ['Left', 'Down', 'Right', 'Up']
+
+"""
+MAPS = {
+    '4x4': [
+        'SFFF',
+        'FHFH',
+        'FFFH',
+        'HFFG'
+    ],
+    '8x8': [
+        'SFFFFFFF',
+        'FFFFFFFF',
+        'FFFHFFFF',
+        'FFFFFHFF',
+        'FFFHFFFF',
+        'FHHFFFHF',
+        'FHFFHFHF',
+        'FFFHFFFG'
+    ]
+}
+"""
 
 def dump_table(Qout, state_size):
     """
@@ -101,6 +125,7 @@ decay_rate = 0.005          # Exponential decay rate for exploration prob
 
 # learning params
 y = .98
+learning_rate = 0.001
 
 #num_episodes = 2000 original value
 num_episodes = 1000
@@ -221,6 +246,7 @@ with tf.Session() as sess:
 
                 if nStepList and nRewardList:
                     print("trailing {}, mean steps: {:.4f}, mean reward: {:.4f} rsum:{}, rcnt:{}".format(nStepList - startpoint, np.mean(stepList[startpoint:]), np.mean(rewardList[startpoint:]), np.sum(rewardList[startpoint:]), len(rewardList[startpoint:])))
+                    print("Episode {:>3d} of {:>4d} e/s/r: {:.4f} / {:4.1f} / {}".format(episode, num_episodes, epsilon, round(np.mean(stepList), 4), round(np.mean(rewardList), 4)))
 
     # dump the table
     if (episode == num_episodes - 1) or (DEBUG & 4):
